@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LunarLens: Moon landing site explorer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#eceff5;--ink:#1a2036;--mute:#5d6683;--panel:#fff;--line:#d5dae7;--sun:#c98a12;--earth:#2f7fc1;--accent:#2f7fc1;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10131e;--ink:#e7eaf4;--mute:#97a0bd;--panel:#1a2031;--line:#2c3550;--sun:#f2b544;--earth:#6fb7e9;--accent:#6fb7e9}}
+:root[data-theme="dark"]{--bg:#10131e;--ink:#e7eaf4;--mute:#97a0bd;--panel:#1a2031;--line:#2c3550;--sun:#f2b544;--earth:#6fb7e9;--accent:#6fb7e9}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Instrument Sans",system-ui,sans-serif}
+.app{max-width:1180px;margin:0 auto;padding:28px 18px 40px}
+h1{font:700 clamp(34px,6vw,56px)/1.02 Fraunces,Georgia,serif;margin:0 0 8px;letter-spacing:-.01em}
+.sub{max-width:60ch;color:var(--mute);margin:0 0 24px;font-size:17px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 370px;gap:20px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.view{background:#0a0d17;border-radius:8px;position:relative;overflow:hidden}
+canvas{display:block;width:100%;height:auto}
+#moon{max-width:620px;margin:0 auto;cursor:grab;touch-action:none}
+.views{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap}
+button{font:inherit;cursor:pointer;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 11px}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.views button{background:rgba(26,32,49,.85);color:#e7eaf4;border-color:#34405f;font-size:13px}
+.views button.on{border-color:#f2b544}
+.legend{position:absolute;left:10px;bottom:10px;color:#b9c1da;font-size:12.5px;display:flex;gap:14px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.time{margin-top:14px;display:grid;gap:10px}
+.trow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.when{font:600 20px Fraunces,Georgia,serif;font-variant-numeric:tabular-nums}
+.phase{color:var(--mute);font-size:13.5px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+h2{font:600 20px Fraunces,Georgia,serif;margin:0 0 4px}
+.small{font-size:13px;color:var(--mute)}
+#chart{margin-top:6px}
+.site{display:grid;grid-template-columns:1fr auto;gap:2px 10px;width:100%;text-align:left;margin-bottom:6px;padding:9px 11px}
+.site.on{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.site b{font-weight:600}.site .sc{font:600 18px Fraunces,Georgia,serif;grid-row:span 2;align-self:center;font-variant-numeric:tabular-nums}
+.bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:12px 0}
+.stat{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.stat span{display:block;font-size:12.5px;color:var(--mute)}.stat strong{font:600 22px Fraunces,Georgia,serif;font-variant-numeric:tabular-nums}
+.w{display:grid;grid-template-columns:92px 1fr 34px;gap:8px;align-items:center;font-size:14px}
+.w output{text-align:right;color:var(--mute);font-variant-numeric:tabular-nums}
+.right{display:grid;gap:16px}
+p{margin:6px 0}
+details{font-size:13.5px;color:var(--mute)}summary{cursor:pointer;color:var(--ink);font-weight:500}
+</style>
+</head>
+<body>
+<div class="app">
+<h1>LunarLens</h1>
+<p class="sub">An interactive exploration tool for understanding the engineering decisions behind future lunar missions.</p>
+<div class="grid">
+<div>
+ <div class="card">
+  <div class="view">
+   <canvas id="moon" width="480" height="480" aria-label="Interactive map of the Moon with candidate landing sites"></canvas>
+   <div class="views" role="group" aria-label="Change view">
+    <button data-v="0,0" class="on">Near side</button><button data-v="-90,0">South pole</button><button data-v="0,180">Far side</button>
+   </div>
+   <div class="legend"><span><i class="dot" style="background:#f2b544"></i>Sun overhead</span><span><i class="dot" style="background:#6fb7e9"></i>Earth overhead</span></div>
+  </div>
+  <div class="small" style="margin-top:8px">Drag to rotate the Moon. Select a site on the map or from the ranking.</div>
+  <div class="time">
+   <div class="trow"><button id="play" aria-label="Play or pause time">Play</button><button id="now">Today</button><span class="when" id="when"></span></div>
+   <input type="range" id="t" min="0" max="1080" value="0" aria-label="Time in hours from the start of today, UTC">
+   <div class="phase" id="phase"></div>
+  </div>
+ </div>
+ <div class="card" style="margin-top:16px">
+  <h2 id="ctitle">Next 30 days</h2>
+  <div class="small">Elevation above the local horizon. Shaded bands mean the Sun is down.</div>
+  <canvas id="chart" width="720" height="190" aria-label="Sun and Earth elevation over the next 30 days"></canvas>
+  <div class="legend" style="position:static;margin-top:4px;color:var(--mute)"><span><i class="dot" style="background:var(--sun)"></i>Sun</span><span><i class="dot" style="background:var(--earth)"></i>Earth</span></div>
+ </div>
+</div>
+<div class="right">
+ <div class="card">
+  <h2>Site ranking</h2>
+  <div class="small" style="margin-bottom:8px">Scores update with the date and your priorities.</div>
+  <div id="list"></div>
+ </div>
+ <div class="card">
+  <h2 id="dname"></h2>
+  <div class="small" id="dcoord"></div>
+  <div class="stats" id="stats"></div>
+  <p id="why"></p>
+  <p class="small" id="note"></p>
+ </div>
+ <div class="card">
+  <h2>What matters most?</h2>
+  <div class="small" style="margin-bottom:8px">Weight the mission needs. The ranking changes with them.</div>
+  <div class="w"><label for="w0">Power</label><input type="range" id="w0" min="0" max="10" value="5"><output></output></div>
+  <div class="w"><label for="w1">Earth link</label><input type="range" id="w1" min="0" max="10" value="5"><output></output></div>
+  <div class="w"><label for="w2">Water ice</label><input type="range" id="w2" min="0" max="10" value="3"><output></output></div>
+  <details style="margin-top:12px"><summary>How the model works</summary>
+  <p>Sun and Earth directions use the mean lunar cycle (29.53 days), the Moon’s axial tilt (about 1.5°) and approximate libration. Terrain is not modelled: a small offset stands in for high ground at the polar and highland sites. Ice scores are rough, qualitative estimates. Treat results as a teaching model, not mission planning.</p></details>
+ </div>
+</div>
+</div>
+<section class="card" style="margin-top:20px" id="about">
+<h2>About this project</h2>
+<div style="max-width:70ch">
+<p>Choosing where to land on the Moon is an engineering decision as much as a scientific one. A site needs sunlight for power, a line of sight to Earth for communication, and ideally water ice nearby. No site wins on all three, so every mission is a tradeoff. LunarLens lets you see that tradeoff for yourself and change the priorities.</p>
+<p>I built it as an independent project on the problem behind NASA’s Space Apps challenge on comparing lunar landing sites, sunlight, and communication windows. It is not affiliated with NASA. I am interested in physics, aviation, and aerospace, and I wanted to turn those interests into something people can use.</p>
+<p>What it teaches: the Sun’s angle changes over a 29.5-day lunar cycle, so most places on the Moon have about two weeks of night. Libration lets Earth drift in and out of view at the edges of the near side. The far side never sees Earth, so it needs a relay satellite. The poles trade long daylight for a grazing, fragile link to Earth.</p>
+<p>What I would improve next: use real ephemeris data in place of my approximations, add terrain and illumination maps, and test the scoring against published mission analyses.</p>
+<p class="small">Sites checked against NASA, LROC, and mission sources: Malapert (86°S, 0°E) and the Chang’e-4 landing site (45.46°S, 177.59°E). Ice scores are rough qualitative estimates, not measurements.</p>
+</div>
+</section>
+</div>
+<script>
+const R=Math.PI/180,SYN=29.530589,REF=2451550.1;
+const SITES=[
+{n:'Shackleton rim',r:'South pole',lat:-89.9,lon:0,ice:1,lift:2.5,note:'Ridges here are exposed to almost continual sunlight, beside craters that stay in permanent shadow and may hold ice. NASA lists a peak near Shackleton among its 13 Artemis III candidate regions. Earth skims the horizon, so the radio link is fragile.'},
+{n:'Malapert massif',r:'South pole region',lat:-86,lon:0,ice:.7,lift:2,note:'A massif near 86°S, 0°E that rises more than 5 km above its base and has sight lines to both Earth and Shackleton, which suits a communications relay. It is an Artemis III candidate region. Ice lies farther away.'},
+{n:'Tranquility Base',r:'Apollo 11, Mare Tranquillitatis',lat:.67,lon:23.47,ice:0,lift:0,note:'Flat mare terrain and easy Earth contact, but a two-week night that demands heavy power storage or heating.'},
+{n:'Taurus-Littrow',r:'Apollo 17, valley',lat:20.19,lon:30.77,ice:0,lift:0,note:'Valley walls offer varied rock for science. Like every low-latitude site, it faces about 14 Earth days of darkness.'},
+{n:'Marius Hills',r:'Oceanus Procellarum',lat:14.1,lon:-56.8,ice:.1,lift:0,note:'Volcanic domes and a possible lava-tube skylight could give natural shelter. Earth stays above the horizon all month, roughly 30° to 40° up.'},
+{n:'Schrödinger basin',r:'Far side, near south pole',lat:-75,lon:132.4,ice:.55,lift:1,note:'A well-preserved basin rich in geology with shadowed ground nearby, but the Moon blocks any direct line to Earth. A relay satellite is required.'},
+{n:'Chang’e-4 site',r:'Von Kármán crater, far side',lat:-45.46,lon:177.59,ice:.1,lift:0,note:'Where China’s Chang’e-4 landed in 2019, inside the South Pole–Aitken basin. With no direct line to Earth, it relied on the Queqiao relay satellite for all communication.'}];
+const $=id=>document.getElementById(id);
+const st={sel:0,off:0,view:[0,0],w:[5,5,3],play:0};
+const d0=new Date();const T0=Date.UTC(d0.getUTCFullYear(),d0.getUTCMonth(),d0.getUTCDate());
+const jdOf=h=>(T0+h*3600e3)/864e5+2440587.5;
+function geo(jd){const x=jd-REF;let s=180-360*(x/SYN);s=(((s%360)+540)%360)-180;
+ return{sl:s,sb:1.54*Math.cos(2*Math.PI*x/346.62),el:7.9*Math.sin(2*Math.PI*x/27.5546),eb:6.7*Math.sin(2*Math.PI*x/27.2122+1)}}
+function elev(lat,lon,b,l){return Math.asin(Math.sin(lat*R)*Math.sin(b*R)+Math.cos(lat*R)*Math.cos(b*R)*Math.cos((lon-l)*R))/R}
+function stats(s,jd0){let sun=0,ear=0,run=0,best=0;const N=360;
+ for(let k=0;k<N;k++){const g=geo(jd0+k/12),a=elev(s.lat,s.lon,g.sb,g.sl)+s.lift,e=elev(s.lat,s.lon,g.eb,g.el)+s.lift;
+  if(a>0){sun++;run=0}else{run++;best=Math.max(best,run)} if(e>0)ear++}
+ return{sun:sun/N,ear:ear/N,night:best*2}}
+// procedural surface texture
+const TW=512,TH=256,tex=new Float32Array(TW*TH);
+(function(){const h=(x,y,z)=>{const n=Math.sin(x*127.1+y*311.7+z*74.7)*43758.5453;return n-Math.floor(n)};
+ const vn=(x,y,z)=>{const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z),fx=x-xi,fy=y-yi,fz=z-zi,u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy),w=fz*fz*(3-2*fz);
+  const L=(a,b,t)=>a+(b-a)*t;
+  return L(L(L(h(xi,yi,zi),h(xi+1,yi,zi),u),L(h(xi,yi+1,zi),h(xi+1,yi+1,zi),u),v),L(L(h(xi,yi,zi+1),h(xi+1,yi,zi+1),u),L(h(xi,yi+1,zi+1),h(xi+1,yi+1,zi+1),u),v),w)};
+ for(let j=0;j<TH;j++)for(let i=0;i<TW;i++){const lo=(i/TW)*2*Math.PI,la=Math.PI/2-(j/TH)*Math.PI,x=Math.cos(la)*Math.cos(lo),y=Math.sin(la),z=Math.cos(la)*Math.sin(lo);
+  let a=vn(x*2+9,y*2,z*2),m=Math.min(1,Math.max(0,(a-.5)*4+.5)),f=.5*vn(x*9,y*9,z*9)+.3*vn(x*22,y*22,z*22)+.2*vn(x*50,y*50,z*50);
+  tex[j*TW+i]=(0.9-0.35*m)*(0.7+0.3*f)}})();
+const mc=$('moon'),mx=mc.getContext('2d'),W=mc.width,RAD=W*.46;
+const img=mx.createImageData(W,W);
+function project(lat,lon){const p=st.view[0]*R,dl=(lon-st.view[1])*R,c=Math.sin(p)*Math.sin(lat*R)+Math.cos(p)*Math.cos(lat*R)*Math.cos(dl);
+ return{x:W/2+RAD*Math.cos(lat*R)*Math.sin(dl),y:W/2-RAD*(Math.cos(p)*Math.sin(lat*R)-Math.sin(p)*Math.cos(lat*R)*Math.cos(dl)),v:c>0}}
+function drawMoon(){const g=geo(jdOf(st.off)),p0=st.view[0]*R,l0=st.view[1]*R,sp=Math.sin(p0),cp=Math.cos(p0),
+ sb=Math.sin(g.sb*R),cb=Math.cos(g.sb*R),d=img.data;
+ for(let py=0;py<W;py++)for(let px=0;px<W;px++){const x=(px-W/2)/RAD,y=-(py-W/2)/RAD,r2=x*x+y*y,o=(py*W+px)*4;
+  if(r2>1){d[o]=10;d[o+1]=13;d[o+2]=23;d[o+3]=255;continue}
+  const z=Math.sqrt(1-r2),s=z*sp+y*cp,lon=l0+Math.atan2(x,z*cp-y*sp),cl=Math.sqrt(1-s*s),
+   se=s*sb+cl*cb*Math.cos(lon-g.sl*R),b=se>0?Math.pow(se,.7):0,lo=((lon%(2*Math.PI))+2*Math.PI)%(2*Math.PI),
+   al=tex[Math.min(TH-1,Math.floor((Math.PI/2-Math.asin(s))/Math.PI*TH))*TW+Math.min(TW-1,Math.floor(lo/(2*Math.PI)*TW))],
+   L=(.05+.95*b)*al*255*(1-.18*(1-z)); d[o]=L;d[o+1]=L*.98;d[o+2]=L*.94;d[o+3]=255}
+ mx.putImageData(img,0,0);
+ const mark=(lat,lon,col,lab,rad)=>{const q=project(lat,lon);if(!q.v)return;mx.strokeStyle=col;mx.lineWidth=2;mx.beginPath();mx.arc(q.x,q.y,rad,0,7);mx.stroke();mx.fillStyle=col;mx.font='12px sans-serif';if(lab)mx.fillText(lab,q.x+rad+4,q.y+4)};
+ mark(g.sb,g.sl,'#f2b544','',9);mark(g.eb,g.el,'#6fb7e9','',9);
+ SITES.forEach((s,i)=>{const q=project(s.lat,s.lon);if(!q.v)return;const on=i===st.sel;
+  mx.fillStyle=on?'#f2b544':'#ffffff';mx.strokeStyle='#0a0d17';mx.lineWidth=2;mx.beginPath();mx.arc(q.x,q.y,on?7:5,0,7);mx.fill();mx.stroke();
+  if(on){mx.strokeStyle='#f2b544';mx.beginPath();mx.arc(q.x,q.y,12,0,7);mx.stroke()}
+  mx.font=(on?'600 ':'')+'13px sans-serif';mx.fillStyle='#fff';mx.strokeStyle='rgba(10,13,23,.9)';mx.lineWidth=3;mx.strokeText(s.n,q.x+11,q.y+4);mx.fillText(s.n,q.x+11,q.y+4)})}
+function drawChart(){const c=$('chart'),x=c.getContext('2d'),cs=getComputedStyle(document.documentElement),s=SITES[st.sel],jd0=jdOf(st.off),w=c.width,h=c.height,pl=34,pb=22,iw=w-pl-8,ih=h-pb-8,N=360;
+ x.clearRect(0,0,w,h);const Y=v=>8+ih*(1-(v+90)/180),X=k=>pl+iw*k/N;
+ const A=[],E=[];for(let k=0;k<=N;k++){const g=geo(jd0+k/12);A.push(elev(s.lat,s.lon,g.sb,g.sl)+s.lift);E.push(elev(s.lat,s.lon,g.eb,g.el)+s.lift)}
+ x.fillStyle=cs.getPropertyValue('--line');x.globalAlpha=.55;
+ for(let k=0;k<N;k++)if(A[k]<=0)x.fillRect(X(k),8,X(k+1)-X(k)+.5,ih);x.globalAlpha=1;
+ x.strokeStyle=cs.getPropertyValue('--mute');x.fillStyle=cs.getPropertyValue('--mute');x.font='11px sans-serif';x.lineWidth=1;
+ [-90,0,90].forEach(v=>{x.beginPath();x.moveTo(pl,Y(v));x.lineTo(w-8,Y(v));x.globalAlpha=v?.25:.7;x.stroke();x.globalAlpha=1;x.fillText(v+'°',2,Y(v)+4)});
+ for(let dd=0;dd<=30;dd+=5)x.fillText('+'+dd+'d',Math.min(X(dd*12)-8,w-30),h-6);
+ const line=(arr,col)=>{x.strokeStyle=col;x.lineWidth=2.2;x.beginPath();arr.forEach((v,k)=>k?x.lineTo(X(k),Y(v)):x.moveTo(X(k),Y(v)));x.stroke()};
+ line(E,cs.getPropertyValue('--earth'));line(A,cs.getPropertyValue('--sun'))}
+function scoreOf(s,t){const w=st.w,sum=w[0]+w[1]+w[2]||1;return 100*(w[0]*t.sun+w[1]*t.ear+w[2]*s.ice)/sum}
+function ui(){const jd=jdOf(st.off),g=geo(jd),dt=new Date(T0+st.off*3600e3);
+ $('when').textContent=dt.toUTCString().slice(5,22)+' UTC';
+ const ph=(((jd-REF)/SYN)%1+1)%1;$('phase').textContent='From Earth the Moon looks '+Math.round((1-Math.cos(2*Math.PI*ph))/2*100)+'% lit ('+(ph<.5?'waxing':'waning')+'). The Sun is overhead at '+Math.abs(Math.round(g.sl))+'°'+(g.sl>=0?'E':'W')+'.';
+ const rows=SITES.map((s,i)=>{const t=stats(s,jd);return{s,i,t,sc:scoreOf(s,t)}}).sort((a,b)=>b.sc-a.sc);
+ $('list').innerHTML=rows.map(r=>`<button class="site ${r.i===st.sel?'on':''}" data-i="${r.i}"><span><b>${r.s.n}</b><br><span class="small">${r.s.r}</span></span><span class="sc">${Math.round(r.sc)}</span><span class="bar" style="grid-column:1/-1;margin-top:4px"><i style="width:${r.sc}%"></i></span></button>`).join('');
+ const m=rows.find(r=>r.i===st.sel),s=m.s,t=m.t,se=elev(s.lat,s.lon,g.sb,g.sl)+s.lift,ee=elev(s.lat,s.lon,g.eb,g.el)+s.lift;
+ $('dname').textContent=s.n;$('ctitle').textContent=s.n+': next 30 days';
+ $('dcoord').textContent=s.r+' · '+Math.abs(s.lat)+'°'+(s.lat<0?'S':'N')+', '+Math.abs(s.lon)+'°'+(s.lon<0?'W':'E');
+ const f=v=>Math.round(v*100)+'%';
+ $('stats').innerHTML=[['Sunlit',f(t.sun)],['Earth in view',f(t.ear)],['Longest night',t.night>=720?'30+ days':t.night>=48?Math.round(t.night/24*10)/10+' days':t.night+' h'],['Right now',(se>0?'Sun up':'Sun down')+(ee>0?', Earth up':', no Earth')]].map(a=>`<div class="stat"><span>${a[0]}</span><strong>${a[1]}</strong></div>`).join('');
+ const c=[['power',t.sun],['Earth contact',t.ear],['water ice access',s.ice]].sort((a,b)=>b[1]-a[1]);
+ $('why').textContent=s.n+' scores '+Math.round(m.sc)+' for your priorities. It is strongest on '+c[0][0]+' ('+f(c[0][1])+') and weakest on '+c[2][0]+' ('+f(c[2][1])+').';
+ $('note').textContent=s.note;
+ $('t').value=st.off;drawMoon();drawChart()}
+$('list').onclick=e=>{const b=e.target.closest('.site');if(b){st.sel=+b.dataset.i;focus(SITES[st.sel]);ui()}};
+function focus(s){st.view=[Math.max(-90,Math.min(90,s.lat*.8)),s.lon];setBtn()}
+function setBtn(){document.querySelectorAll('.views button').forEach(b=>b.classList.remove('on'))}
+document.querySelector('.views').onclick=e=>{const b=e.target.closest('button');if(!b)return;const v=b.dataset.v.split(',').map(Number);st.view=v;setBtn();b.classList.add('on');drawMoon()};
+$('t').oninput=e=>{st.off=+e.target.value;ui()};
+$('now').onclick=()=>{st.off=Math.max(0,Math.round((Date.now()-T0)/3600e3));ui()};
+$('play').onclick=()=>{st.play=!st.play;$('play').textContent=st.play?'Pause':'Play'};
+setInterval(()=>{if(st.play){st.off=(st.off+6)%1081;ui()}},120);
+[0,1,2].forEach(i=>{const el=$('w'+i),o=el.nextElementSibling;o.textContent=el.value;el.oninput=()=>{st.w[i]=+el.value;o.textContent=el.value;ui()}});
+// drag + click on the map
+let dr=null;
+mc.onpointerdown=e=>{mc.setPointerCapture(e.pointerId);dr={x:e.clientX,y:e.clientY,m:0}};
+mc.onpointermove=e=>{if(!dr)return;const k=W/mc.getBoundingClientRect().width,dx=(e.clientX-dr.x)*k,dy=(e.clientY-dr.y)*k;dr.m+=Math.abs(dx)+Math.abs(dy);dr.x=e.clientX;dr.y=e.clientY;
+ st.view=[Math.max(-90,Math.min(90,st.view[0]+dy/RAD*50)),st.view[1]-dx/RAD*50/Math.max(.25,Math.cos(st.view[0]*R))];setBtn();drawMoon()};
+mc.onpointerup=e=>{if(dr&&dr.m<6){const r=mc.getBoundingClientRect(),k=W/r.width,px=(e.clientX-r.left)*k,py=(e.clientY-r.top)*k;let bi=-1,bd=18;
+ SITES.forEach((s,i)=>{const q=project(s.lat,s.lon);if(!q.v)return;const dd=Math.hypot(q.x-px,q.y-py);if(dd<bd){bd=dd;bi=i}});if(bi>=0){st.sel=bi;ui()}}dr=null};
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>drawChart());
+ui();
+</script>
+</body>
+</html>
